@@ -1,14 +1,12 @@
-import fs from "fs";
-import csv from "csv-parser";
+import fs from 'fs';
+import csvParser from 'csv-parser';
 
-export const processCsvToArray = (filePath) => {
-  return new Promise((resolve, reject) => {
-    const results = [];
+export const processCsvInStreaming = (inputFile, onData, onEnd, onError) => {
+  const readStream = fs.createReadStream(inputFile);
 
-    fs.createReadStream(filePath)
-      .pipe(csv())
-      .on("data", (data) => results.push(data))
-      .on("end", () => resolve(results))
-      .on("error", (error) => reject(error));
-  });
+  readStream
+      .pipe(csvParser())
+      .on('data', onData)
+      .on('end', onEnd)
+      .on('error', onError);
 };

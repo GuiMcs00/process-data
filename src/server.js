@@ -1,50 +1,38 @@
 import express from "express";
 import multer from "multer";
-import { processCsvToArray } from "./helpers/csvProcessor.js";
-import { saveProcessedCsv } from "./helpers/csvWriter.js";
+import { processCsvInStreaming } from "./helpers/csvProcessor.js";
+import { rowToJson } from "./helpers/jsonConverter.js";
 
 const app = express();
 const upload = multer({ dest: "uploads/" });
 
-let cachedData = null;
-let lastUploadTimestamp = null;
 
 app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   next();
 });
 
-const paginate = (array, page, limit) => {
-  const start = (page - 1) * limit;
-  const end = page * limit;
-  return array.slice(start, end);
-};
-
 app.post("/upload", upload.single("csv"), async (req, res) => {
   try {
-    if (req.file || !cachedData) {
-      const filePath = req.file ? req.file.path : null;
+    if (req.file) {
 
-      if (!cachedData || lastUploadTimestamp !== req.file.filename) {
-        const data = await processCsvToArray(filePath);
-        lastUploadTimestamp = req.file.filename;
+      const filePath = req.file.path;
 
-        cachedData = saveProcessedCsv(data, "processed_results.csv");
+      const onData = (row) => {
+        const jsonData = rowToJson(row);
+        res.write(jsonData + "\n")
+      }
+
+      const onEnd = () => { res.end() };
+
+      const onError = (error) => {
+        console.error("Erro ao ler o CSV", error);
+        res.status(500).send("Erro ao processar o CSV");
       }
     }
 
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
+    processCsvInStreaming(filePath, onData, onEnd, onError);
 
-    const paginatedData = paginate(cachedData, page, limit);
-    const totalPages = Math.ceil(cachedData.length / limit);
-
-    res.json({
-      results: paginatedData,
-      page,
-      totalPages,
-      totalResults: cachedData.length,
-    });
   } catch (error) {
     res.status(500).send("Error processing file");
   }
